@@ -256,26 +256,46 @@ local Load = function()
 			Offset = OffsetToMoveDirection and __index(FindFirstChildOfClass(__index(Environment.Locked, "Character"), "Humanoid"), "MoveDirection") * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
 
 			if Environment.Locked then
-				local LockedPosition_Vector3 = __index(__index(Environment.Locked, "Character")[LockPart], "Position")
-				local LockedPosition = WorldToViewportPoint(Camera, LockedPosition_Vector3 + Offset)
-
-				if Environment.Settings.LockMode == 2 then
-					mousemoverel((LockedPosition.X - GetMouseLocation(UserInputService).X) / Settings.Sensitivity2, (LockedPosition.Y - GetMouseLocation(UserInputService).Y) / Settings.Sensitivity2)
-				else
-					if Settings.Sensitivity > 0 then
-						Animation = TweenService:Create(Camera, TweenInfonew(Environment.Settings.Sensitivity, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {CFrame = CFramenew(Camera.CFrame.Position, LockedPosition_Vector3)})
-						Animation:Play()
-					else
-						__newindex(Camera, "CFrame", CFramenew(Camera.CFrame.Position, LockedPosition_Vector3 + Offset))
-					end
-
-					__newindex(UserInputService, "MouseDeltaSensitivity", 0)
+				-- try Player check first
+				if Environment.Locked:IsA and Environment.Locked:IsA("Player") then
+					targetCharacter = Environment.Locked.Character
+				-- if it's a Model with a Humanoid, use it directly
+				elseif Environment.Locked:IsA and Environment.Locked:IsA("Model") and Environment.Locked:FindFirstChildOfClass("Humanoid") then
+					targetCharacter = Environment.Locked
 				end
 
-				setrenderproperty(FOVCircle, "Color", FOVSettings.LockedColor)
+				-- ensure we actually have the lock part on the resolved character/model
+				if not (targetCharacter and targetCharacter:FindFirstChild(LockPart)) then
+					-- invalid target (e.g. the locked value was a model without the requested part)
+					CancelLock()
+				else
+					local LockedPosition_Vector3 = targetCharacter[LockPart].Position
+
+					-- rest of your existing behavior (unchanged)
+					if Environment.Settings.LockMode == 2 then
+						mousemoverel(
+							(WorldToViewportPoint(Camera, LockedPosition_Vector3).X - GetMouseLocation(UserInputService).X) / Settings.Sensitivity2,
+							(WorldToViewportPoint(Camera, LockedPosition_Vector3).Y - GetMouseLocation(UserInputService).Y) / Settings.Sensitivity2
+						)
+					else
+						if Settings.Sensitivity > 0 then
+							Animation = TweenService:Create(
+								Camera, 
+								TweenInfonew(Environment.Settings.Sensitivity, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+								{CFrame = CFramenew(Camera.CFrame.Position, LockedPosition_Vector3)}
+							)
+							Animation:Play()
+						else
+							__newindex(Camera, "CFrame", CFramenew(Camera.CFrame.Position, LockedPosition_Vector3 + Offset))
+						end
+
+						__newindex(UserInputService, "MouseDeltaSensitivity", 0)
+					end
+
+					setrenderproperty(FOVCircle, "Color", FOVSettings.LockedColor)
+				end
 			end
-		end
-	end)
+        end
 
 	ServiceConnections.InputBeganConnection = Connect(__index(UserInputService, "InputBegan"), function(Input)
 		local TriggerKey, Toggle = Settings.TriggerKey, Settings.Toggle
