@@ -1,4 +1,48 @@
 -- (original header kept unchanged)
+
+-- Ensure global table exists
+getgenv().ExunysDeveloperAimbot = getgenv().ExunysDeveloperAimbot or {}
+local Environment = getgenv().ExunysDeveloperAimbot
+
+-- Initialize default tables if missing
+Environment.DeveloperSettings = Environment.DeveloperSettings or {
+	UpdateMode = "RenderStepped",
+	TeamCheckOption = "TeamColor",
+	RainbowSpeed = 1 -- Bigger = slower
+}
+
+Environment.Settings = Environment.Settings or {
+	Enabled = true,
+	TeamCheck = false,
+	AliveCheck = true,
+	WallCheck = false,
+	IgnoreNPCs = false,
+	OnlyNPCs = false,
+	OffsetToMoveDirection = false,
+	OffsetIncrement = 15,
+	Sensitivity = 0,
+	Sensitivity2 = 3.5,
+	LockMode = 1,
+	LockPart = "Head",
+	TriggerKey = Enum.UserInputType.MouseButton2,
+	Toggle = false
+}
+
+Environment.FOVSettings = Environment.FOVSettings or {
+	Enabled = true,
+	Visible = true,
+	Radius = 90,
+	NumSides = 60,
+	Thickness = 1,
+	Transparency = 1,
+	Filled = false,
+	RainbowColor = false,
+	RainbowOutlineColor = false,
+	Color = Color3.fromRGB(255, 255, 255),
+	OutlineColor = Color3.fromRGB(0, 0, 0),
+	LockedColor = Color3.fromRGB(255, 150, 150)
+}
+
 local game, workspace = game, workspace
 local getrawmetatable, getmetatable, setmetatable, pcall, getgenv, next, tick = getrawmetatable, getmetatable, setmetatable, pcall, getgenv, next, tick
 local Vector2new, Vector3zero, CFramenew, Color3fromRGB, Color3fromHSV, Drawingnew, TweenInfonew = Vector2.new, Vector3.zero, CFrame.new, Color3.fromRGB, Color3.fromHSV, Drawing.new, TweenInfo.new
@@ -49,6 +93,7 @@ local Connect, Disconnect = __index(game, "DescendantAdded").Connect
 if ExunysDeveloperAimbot and ExunysDeveloperAimbot.Exit then
 	ExunysDeveloperAimbot:Exit()
 end
+
 
 --// Environment
 getgenv().ExunysDeveloperAimbot = {
