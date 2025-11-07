@@ -1,47 +1,12 @@
--- (original header kept unchanged)
+--[[
 
--- Ensure global table exists
-getgenv().ExunysDeveloperAimbot = getgenv().ExunysDeveloperAimbot or {}
-local Environment = getgenv().ExunysDeveloperAimbot
+	Universal Aimbot Module by Exunys © CC0 1.0 Universal (2023 - 2024)
+	Modified: NPC-only mode (targets Models with Humanoids, excludes player characters)
 
--- Initialize default tables if missing
-Environment.DeveloperSettings = Environment.DeveloperSettings or {
-	UpdateMode = "RenderStepped",
-	TeamCheckOption = "TeamColor",
-	RainbowSpeed = 1 -- Bigger = slower
-}
+]]
 
-Environment.Settings = Environment.Settings or {
-	Enabled = true,
-	TeamCheck = false,
-	AliveCheck = true,
-	WallCheck = false,
-	IgnoreNPCs = false,
-	OnlyNPCs = false,
-	OffsetToMoveDirection = false,
-	OffsetIncrement = 15,
-	Sensitivity = 0,
-	Sensitivity2 = 3.5,
-	LockMode = 1,
-	LockPart = "Head",
-	TriggerKey = Enum.UserInputType.MouseButton2,
-	Toggle = false
-}
 
-Environment.FOVSettings = Environment.FOVSettings or {
-	Enabled = true,
-	Visible = true,
-	Radius = 90,
-	NumSides = 60,
-	Thickness = 1,
-	Transparency = 1,
-	Filled = false,
-	RainbowColor = false,
-	RainbowOutlineColor = false,
-	Color = Color3.fromRGB(255, 255, 255),
-	OutlineColor = Color3.fromRGB(0, 0, 0),
-	LockedColor = Color3.fromRGB(255, 150, 150)
-}
+--// Cache
 
 local game, workspace = game, workspace
 local getrawmetatable, getmetatable, setmetatable, pcall, getgenv, next, tick = getrawmetatable, getmetatable, setmetatable, pcall, getgenv, next, tick
@@ -50,9 +15,11 @@ local getupvalue, mousemoverel, tablefind, tableremove, stringlower, stringsub, 
 
 local GameMetatable = getrawmetatable and getrawmetatable(game) or {
 	-- Auxillary functions - if the executor doesn't support "getrawmetatable".
+
 	__index = function(self, Index)
 		return self[Index]
 	end,
+
 	__newindex = function(self, Index, Value)
 		self[Index] = Value
 	end
@@ -66,12 +33,14 @@ local getrenderproperty, setrenderproperty = getrenderproperty or __index, setre
 local GetService = __index(game, "GetService")
 
 --// Services
+
 local RunService = GetService(game, "RunService")
 local UserInputService = GetService(game, "UserInputService")
 local TweenService = GetService(game, "TweenService")
 local Players = GetService(game, "Players")
 
 --// Service Methods
+
 local LocalPlayer = __index(Players, "LocalPlayer")
 local Camera = __index(workspace, "CurrentCamera")
 
@@ -81,21 +50,15 @@ local WorldToViewportPoint = __index(Camera, "WorldToViewportPoint")
 local GetPartsObscuringTarget = __index(Camera, "GetPartsObscuringTarget")
 local GetMouseLocation = __index(UserInputService, "GetMouseLocation")
 local GetPlayers = __index(Players, "GetPlayers")
-
--- NEW: reference to workspace.CurrentBots for NPC checks
-local CurrentBots = __index(workspace, "CurrentBots")
+local GetPlayerFromCharacter = __index(Players, "GetPlayerFromCharacter") -- used to exclude player characters
 
 --// Variables
+
 local RequiredDistance, Typing, Running, ServiceConnections, Animation, OriginalSensitivity = 2000, false, false, {}
 local Connect, Disconnect = __index(game, "DescendantAdded").Connect
 
---// Checking for multiple processes
-if ExunysDeveloperAimbot and ExunysDeveloperAimbot.Exit then
-	ExunysDeveloperAimbot:Exit()
-end
+-- Environment
 
-
---// Environment
 getgenv().ExunysDeveloperAimbot = {
 	DeveloperSettings = {
 		UpdateMode = "RenderStepped",
@@ -109,10 +72,6 @@ getgenv().ExunysDeveloperAimbot = {
 		TeamCheck = false,
 		AliveCheck = true,
 		WallCheck = false,
-
-		-- NPC targeting options (new)
-		IgnoreNPCs = false, -- if true, skip any character that is a child/descendant of workspace.CurrentBots
-		OnlyNPCs = false,   -- if true, only target characters that are children/descendants of workspace.CurrentBots
 
 		OffsetToMoveDirection = false,
 		OffsetIncrement = 15,
@@ -156,6 +115,7 @@ setrenderproperty(Environment.FOVCircle, "Visible", false)
 setrenderproperty(Environment.FOVCircleOutline, "Visible", false)
 
 --// Core Functions
+
 local FixUsername = function(String)
 	local Result
 
@@ -193,74 +153,70 @@ local CancelLock = function()
 	end
 end
 
+-- Modified: NPC-only targeting function
 local GetClosestPlayer = function()
 	local Settings = Environment.Settings
 	local LockPart = Settings.LockPart
-	local BotsFolder = workspace:FindFirstChild("CurrentBots")
-
-	if not BotsFolder then
-		return -- safety check
-	end
 
 	if not Environment.Locked then
 		RequiredDistance = Environment.FOVSettings.Enabled and Environment.FOVSettings.Radius or 2000
 
-		for _, Model in next, BotsFolder:GetChildren() do
-			if not Model:IsA("Model") then
-				continue
-			end
+		-- Iterate workspace descendants and find Models with Humanoids (NPCs)
+		for _, Desc in next, GetDescendants(workspace) do
+			-- We want top-level Models (or any Model) that contain a Humanoid and the LockPart
+			if __index(Desc, "IsA") and Desc:IsA("Model") then
+				local Character = Desc
+				local Humanoid = FindFirstChildOfClass(Character, "Humanoid")
 
-			local Humanoid = Model:FindFirstChildOfClass("Humanoid")
-			local LockPartInstance = Model:FindFirstChild(LockPart)
-
-			if not (Humanoid and LockPartInstance) then
-				continue
-			end
-
-			if Settings.AliveCheck and Humanoid.Health <= 0 then
-				continue
-			end
-
-			if Settings.WallCheck then
-				local LocalChar = LocalPlayer.Character
-				if not LocalChar then
+				-- skip if no humanoid or no lock part
+				if not Humanoid or not FindFirstChild(Character, LockPart) then
 					continue
 				end
 
-				local blacklist = {}
-				for _, v in next, LocalChar:GetDescendants() do
-					table.insert(blacklist, v)
+				-- exclude player characters: if Players:GetPlayerFromCharacter(character) returns a player, skip
+				local AssociatedPlayer = nil
+				local success, playerResult = pcall(GetPlayerFromCharacter, Players, Character)
+				if success then
+					AssociatedPlayer = playerResult
 				end
-				for _, v in next, Model:GetDescendants() do
-					table.insert(blacklist, v)
-				end
-
-				local parts = Camera:GetPartsObscuringTarget({ LockPartInstance.Position }, blacklist)
-				if #parts > 0 then
+				if AssociatedPlayer then
 					continue
 				end
-			end
 
-			local Vector, OnScreen = Camera:WorldToViewportPoint(LockPartInstance.Position)
-			local Distance = (UserInputService:GetMouseLocation() - Vector2.new(Vector.X, Vector.Y)).Magnitude
+				-- optional alive check
+				if Settings.AliveCheck and __index(Humanoid, "Health") <= 0 then
+					continue
+				end
 
-			if OnScreen and Distance < RequiredDistance then
-				RequiredDistance = Distance
-				Environment.Locked = Model
+				-- optional wall check: build a blacklist of local player's character parts and npc parts
+				if Settings.WallCheck then
+					local BlacklistTable = {}
+					if __index(LocalPlayer, "Character") then
+						local localDesc = GetDescendants(__index(LocalPlayer, "Character"))
+						for _,v in next, localDesc do BlacklistTable[#BlacklistTable+1] = v end
+					end
+					for _, v in next, GetDescendants(Character) do
+						BlacklistTable[#BlacklistTable + 1] = v
+					end
+
+					if #GetPartsObscuringTarget(Camera, {__index(Character[LockPart], "Position")}, BlacklistTable) > 0 then
+						continue
+					end
+				end
+
+				local PartPosition = __index(Character[LockPart], "Position")
+				local Vector, OnScreen, Distance = WorldToViewportPoint(Camera, PartPosition)
+				Vector = ConvertVector(Vector)
+				Distance = (GetMouseLocation(UserInputService) - Vector).Magnitude
+
+				if Distance < RequiredDistance and OnScreen then
+					RequiredDistance, Environment.Locked = Distance, Character -- store the Model (NPC)
+				end
 			end
 		end
-	else
-		local LockedChar = Environment.Locked
-		if LockedChar and LockedChar:FindFirstChild(LockPart) then
-			local pos = LockedChar[LockPart].Position
-			local screenPos = Camera:WorldToViewportPoint(pos)
-			local dist = (UserInputService:GetMouseLocation() - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
-			if dist > RequiredDistance then
-				CancelLock()
-			end
-		else
-			CancelLock()
-		end
+	-- If already locked, check if still within fov radius; adapt to Model-based Environment.Locked
+	elseif (GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera, __index(__index(Environment.Locked, Settings.LockPart), "Position")))).Magnitude > RequiredDistance then
+		CancelLock()
 	end
 end
 
@@ -268,7 +224,13 @@ local Load = function()
 	OriginalSensitivity = __index(UserInputService, "MouseDeltaSensitivity")
 
 	local Settings, FOVCircle, FOVCircleOutline, FOVSettings, Offset = Environment.Settings, Environment.FOVCircle, Environment.FOVCircleOutline, Environment.FOVSettings
-	
+
+	--[[
+	if not Degrade then
+		FOVCircle, FOVCircleOutline = FOVCircle.__OBJECT, FOVCircleOutline.__OBJECT
+	end
+	]]
+
 	ServiceConnections.RenderSteppedConnection = Connect(__index(RunService, Environment.DeveloperSettings.UpdateMode), function()
 		local OffsetToMoveDirection, LockPart = Settings.OffsetToMoveDirection, Settings.LockPart
 
@@ -298,49 +260,31 @@ local Load = function()
 		if Running and Settings.Enabled then
 			GetClosestPlayer()
 
-			local Camera = workspace.CurrentCamera
-			if not Camera then
-				return
-			end
+			-- Offset calculated from NPC Humanoid MoveDirection if set
+			Offset = OffsetToMoveDirection and __index(FindFirstChildOfClass(Environment.Locked, "Humanoid"), "MoveDirection") * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
 
-			local targetCharacter
-			if Environment.Locked:IsA("Player") then
-				targetCharacter = Environment.Locked.Character
-			elseif Environment.Locked:IsA("Model") then
-				targetCharacter = Environment.Locked
-			end
+			if Environment.Locked then
+				-- Adjusted: Environment.Locked is a Model (NPC), so access the LockPart directly
+				local LockedPosition_Vector3 = __index(Environment.Locked[LockPart], "Position")
+				local LockedPosition = WorldToViewportPoint(Camera, LockedPosition_Vector3 + Offset)
 
-			local LockPartInstance = targetCharacter:FindFirstChild(Settings.LockPart) 
-									or targetCharacter:FindFirstChild("HumanoidRootPart")
-			if not LockPartInstance then
-				CancelLock()
-				return
-			end
-
-			local LockedPosition_Vector3 = LockPartInstance.Position
-
-			if Settings.LockMode == 2 then
-				mousemoverel(
-					(WorldToViewportPoint(Camera, LockedPosition_Vector3).X - GetMouseLocation(UserInputService).X) / Settings.Sensitivity2,
-					(WorldToViewportPoint(Camera, LockedPosition_Vector3).Y - GetMouseLocation(UserInputService).Y) / Settings.Sensitivity2
-				)
-			else
-				if Settings.Sensitivity > 0 then
-					Animation = TweenService:Create(
-						Camera, 
-						TweenInfonew(Settings.Sensitivity, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
-						{CFrame = CFramenew(Camera.CFrame.Position, LockedPosition_Vector3)}
-					)
-					Animation:Play()
+				if Environment.Settings.LockMode == 2 then
+					mousemoverel((LockedPosition.X - GetMouseLocation(UserInputService).X) / Settings.Sensitivity2, (LockedPosition.Y - GetMouseLocation(UserInputService).Y) / Settings.Sensitivity2)
 				else
-					__newindex(Camera, "CFrame", CFramenew(Camera.CFrame.Position, LockedPosition_Vector3 + Offset))
+					if Settings.Sensitivity > 0 then
+						Animation = TweenService:Create(Camera, TweenInfonew(Environment.Settings.Sensitivity, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {CFrame = CFramenew(Camera.CFrame.Position, LockedPosition_Vector3)})
+						Animation:Play()
+					else
+						__newindex(Camera, "CFrame", CFramenew(Camera.CFrame.Position, LockedPosition_Vector3 + Offset))
+					end
+
+					__newindex(UserInputService, "MouseDeltaSensitivity", 0)
 				end
 
-				__newindex(UserInputService, "MouseDeltaSensitivity", 0)
+				setrenderproperty(FOVCircle, "Color", FOVSettings.LockedColor)
 			end
-
-			setrenderproperty(FOVCircle, "Color", FOVSettings.LockedColor)
 		end
+	end)
 
 	ServiceConnections.InputBeganConnection = Connect(__index(UserInputService, "InputBegan"), function(Input)
 		local TriggerKey, Toggle = Settings.TriggerKey, Settings.Toggle
@@ -377,6 +321,7 @@ local Load = function()
 end
 
 --// Typing Check
+
 ServiceConnections.TypingStartedConnection = Connect(__index(UserInputService, "TextBoxFocused"), function()
 	Typing = true
 end)
@@ -386,6 +331,7 @@ ServiceConnections.TypingEndedConnection = Connect(__index(UserInputService, "Te
 end)
 
 --// Functions
+
 function Environment.Exit(self) -- METHOD | ExunysDeveloperAimbot:Exit(<void>)
 	assert(self, "EXUNYS_AIMBOT-V3.Exit: Missing parameter #1 \"self\" <table>.")
 
